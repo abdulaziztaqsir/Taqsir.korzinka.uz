@@ -1,0 +1,24 @@
+{
+    "User": {
+        "name": "Abdulaziz",
+        "email": "abdulaziz660@gmail.com",
+        "phone": "+998332907007",
+        "address": "Toshkent"
+    },
+    "Cart": {
+        "items": [
+            {
+                "product": {
+                    "name": "Non",
+                    "price": 5000,
+                    "category": "Oziq-ovqat",
+                    "manufacturer": "Toshkent Bread Factory",
+                    "expiry_date": "2025-12-31",
+                    "stock": 45
+                },
+                "quantity": 5
+            }
+        ]
+    },
+    "Order": null
+}
