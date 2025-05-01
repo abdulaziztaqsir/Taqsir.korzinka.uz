@@ -1,14 +1,27 @@
-
+import logging
 import json
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
+from telegram.ext import ContextTypes
+from datetime import datetime
+# Logging
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Fayl nomlari
+USERS_FILE = 'users.json'
+ORDERS_FILE = 'orders.json'
+COMMENTS_FILE = 'comments.json'
+
+# Foydalanuvchi savatlari
+user_carts = {}
+
+# States
+NAME, EMAIL, PHONE, ADDRESS, PARKING_INFO = range(5)
 
 
-class CustomEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if hasattr(obj, "to_dict"):
-            return obj.to_dict()
-        return super().default(obj)
-
-
+# Mahsulotlar
 class Product:
     def __init__(self, name, price, category, manufacturer, expiry_date, stock):
         self.name = name
@@ -22,6 +35,7 @@ class Product:
         return self.__dict__
 
 
+# Savatdagi mahsulotlar
 class CartItem:
     def __init__(self, product, quantity):
         self.product = product
@@ -31,6 +45,7 @@ class CartItem:
         return {"product": self.product.to_dict(), "quantity": self.quantity}
 
 
+# Savat
 class ShoppingCart:
     def __init__(self):
         self.items = []
@@ -49,20 +64,22 @@ class ShoppingCart:
         return {"items": [item.to_dict() for item in self.items]}
 
 
+# Foydalanuvchi ma'lumotlari
 class User:
-    def __init__(self, name, email, phone, address, parking_info=""):  # Parkovka ma'lumoti qo'shildi
+    def __init__(self, name, email, phone, address, parking_info=""):
         self.name = name
         self.email = email
         self.phone = phone
         self.address = address
-        self.parking_info = parking_info  # Parkovka maydonchasi uchun
+        self.parking_info = parking_info
 
     def to_dict(self):
         return self.__dict__
 
 
+# Buyurtma
 class Order:
-    def __init__(self, user, cart, status, delivery_address, payment_method=""):  # To'lov usuli qo'shildi
+    def __init__(self, user, cart, status, delivery_address, payment_method=""):
         self.user = user
         self.cart = cart
         self.status = status
@@ -74,14 +91,13 @@ class Order:
                 "delivery_address": self.delivery_address, "payment_method": self.payment_method}
 
 
-# JSON saqlash va yuklash
-
-def save_data(filename, data):
+# Faylga saqlash va yuklash
+def save_json(filename, data):
     with open(filename, "w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4, ensure_ascii=False, cls=CustomEncoder)
+        json.dump(data, file, indent=4, ensure_ascii=False)
 
 
-def load_data(filename):
+def load_json(filename):
     try:
         with open(filename, "r", encoding="utf-8") as file:
             return json.load(file)
@@ -89,28 +105,7 @@ def load_data(filename):
         return {}
 
 
-def display_menu():
-    print("\nMenyudan birini tanlang:")
-    print("1. Mahsulotlar ro'yxatini ko'rish")
-    print("2. Savatga mahsulot qo'shish")
-    print("3. Buyurtma berish")
-    print("4. Tolovlar xizmati")
-    print("4. Manzilingizni kiritish")
-    print("5. Parkovka xizmati")
-    print("6. Tolovlar xizmati")
-    print("7. Commentariya yuborish")
-    print("8. Chiqish")
-
-
-def payment_methods():
-    print("\nTo'lov usullarini tanlang:")
-    print("1. Click")
-    print("2. UzCard")
-    print("3. Humo")
-    print("4. Naqd pul")
-
-
-# Misollar
+# Mahsulotlar ro'yxati
 products = [
     Product("Non", 5000, "Oziq-ovqat", "Toshkent Bread Factory", "2025-12-31", 50),
     Product("Sut", 12000, "Oziq-ovqat", "Toshkent Milk", "2025-06-15", 30),
@@ -119,44 +114,172 @@ products = [
     Product("Tuz", 3000, "Oziq-ovqat", "Mahalliy", "2026-12-31", 60),
     Product("Tuxum", 12000, "Oziq-ovqat", "Parrandachilik fabrikasi", "2025-05-20", 100),
     Product("Un", 8000, "Oziq-ovqat", "Toshkent Un", "2026-12-31", 80),
-    Product("Kolbasa", 45000, "Oziq-ovqat", "Meat Products", "2025-06-30", 25)
+    Product("Kolbasa", 45000, "Oziq-ovqat", "Meat Products", "2025-06-30", 25),
+    Product("Gosht", 50000, "Oziq-ovqat", "Taqsir Qassob", "2025-12-25", 50)
 ]
 
-user = User("Abdulaziz", "abdulaziz660@gmail.com", "+998332907007", "Toshkent", "Ko'cha nomi, 12, Parkovka mavjud")
-cart = ShoppingCart()
-order = None
 
-while True:
-    display_menu()
-    choice = input("Tanlovingizni kiriting: ")
+# Maxsus chegirma
+def apply_discount(user_id, total_price):
+    users = load_json(USERS_FILE)
+    if user_id not in users:
+        return total_price  # Yangi foydalanuvchi uchun chegirma yo'q
 
-    if choice == "1":
-        for index, product in enumerate(products, start=1):
-            print(f"{index}. Mahsulot: {product.name}, Narxi: {product.price} so'm, Mavjudligi: {product.stock}")
-    elif choice == "2":
-        product_index = int(input("Mahsulot raqamini kiriting (1-50): ")) - 1
-        if 0 <= product_index < len(products):
-            quantity = int(input("Nechta mahsulot qo'shmoqchisiz? "))
-            cart.add_item(products[product_index], quantity)
-            print(f"{quantity} ta {products[product_index].name} savatga qo'shildi!")
-        else:
-            print("Noto'g'ri mahsulot raqami!")
-    elif choice == "3":
-        if not cart.items:
-            print("Sizning savatingiz bo'sh! Avval mahsulot qo'shing.")
-        else:
-            print("Savatdagi mahsulotlar:")
-            for item in cart.items:
-                print(f"{item.quantity}x {item.product.name} - {item.product.price} so'm")
-            payment_methods()
-            payment_choice = input("To'lov usulini tanlang: ")
-            payment_options = {"1": "Click", "2": "UzCard", "3": "Humo", "4": "Naqd pul"}
-            order = Order(user, cart, "Yangi", user.address, payment_options.get(payment_choice, "Noma'lum"))
-            print(f"Buyurtma qabul qilindi! Yetkazib berish vaqti: taxminan 20 daqiqa. Manzil: {user.address}, Parkovka: {user.parking_info}, To'lov usuli: {order.payment_method}")
-    elif choice == "4":
-        payment_methods()
-    elif choice == "5":
-        print("Dastur tugatildi.")
-        break
+    discount = 0.1
+    discounted_price = total_price * (1 - discount)
+    return discounted_price
+
+
+# --- STATEFUL functions ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Salom! Iltimos, ismingizni kiriting:")
+    return NAME
+
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["name"] = update.message.text
+    await update.message.reply_text("Email manzilingizni kiriting:")
+    return EMAIL
+
+async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["email"] = update.message.text
+    await update.message.reply_text("Telefon raqamingizni kiriting:")
+    return PHONE
+
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["phone"] = update.message.text
+    await update.message.reply_text("Manzilingizni kiriting:")
+    return ADDRESS
+
+async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["address"] = update.message.text
+    await update.message.reply_text("Parking joyingiz haqida ma'lumot kiriting (yoki 'yo'q' deb yozing):")
+    return PARKING_INFO
+
+async def get_parking_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["parking_info"] = update.message.text
+
+    user_id = str(update.effective_user.id)
+    user = User(
+        name=context.user_data["name"],
+        email=context.user_data["email"],
+        phone=context.user_data["phone"],
+        address=context.user_data["address"],
+        parking_info=context.user_data["parking_info"]
+    )
+    users = load_json(USERS_FILE)
+    users[user_id] = user.to_dict()
+    save_json(USERS_FILE, users)
+
+    await update.message.reply_text("✅ Ma'lumotlaringiz saqlandi! Endi buyurtma berishingiz mumkin.")
+    return ConversationHandler.END
+
+
+# To'lov usullarini tanlash
+async def payment_methods(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Click", callback_data="pay_Click")],
+        [InlineKeyboardButton("UzCard", callback_data="pay_UzCard")],
+        [InlineKeyboardButton("Humo", callback_data="pay_Humo")],
+        [InlineKeyboardButton("Naqd pul", callback_data="pay_Cash")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("To'lov usullarini tanlang:", reply_markup=reply_markup)
+
+
+# Buyurtma qabul qilish va statusini yangilash
+async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user_id = str(query.from_user.id)
+
+    if data.startswith("pay_"):
+        payment_method = data.split("_")[1]
+        cart = user_carts.get(user_id, [])
+        users = load_json(USERS_FILE)
+
+        order_data = {
+            "user": users.get(user_id, {}),
+            "cart": cart,
+            "payment_method": payment_method,
+            "status": "Tasdiqlangan"
+        }
+
+        orders = load_json(ORDERS_FILE)
+        orders[user_id] = orders.get(user_id, [])
+        orders[user_id].append(order_data)
+        save_json(ORDERS_FILE, orders)
+
+        user_carts[user_id] = []
+
+        await query.edit_message_text("✅ Buyurtma qabul qilindi! Rahmat!")
+        await query.message.reply_text("Buyurtmaning holati: **Tasdiqlangan**")
+
+
+# Buyurtma holatini tekshirish
+async def check_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    orders = load_json(ORDERS_FILE)
+
+    if user_id not in orders or not orders[user_id]:
+        await update.message.reply_text("Sizda hech qanday buyurtma yo'q.")
     else:
-        print("Noto'g'ri tanlov. Qaytadan kiriting.")
+        last_order = orders[user_id][-1]
+        status = last_order['status']
+        await update.message.reply_text(f"Sizning so‘nggi buyurtmangiz holati: {status}")
+
+
+# Fikrlar va reytinglar
+async def leave_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    product_name = "Non"  # Mahsulot nomi uchun misol
+    review = update.message.text
+
+    reviews = load_json(COMMENTS_FILE)
+    if product_name not in reviews:
+        reviews[product_name] = []
+
+    reviews[product_name].append(review)
+    save_json(COMMENTS_FILE, reviews)
+
+    await update.message.reply_text(f"Sizning fikringiz qabul qilindi. Rahmat!")
+
+
+# Maxsus takliflar va reklama
+async def send_special_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    today = datetime.today().strftime('%Y-%m-%d')
+
+    if today == "2025-04-28":
+        offer = "🎉 Bugun maxsus 20% chegirma! Faqat bugun!"
+        await update.message.reply_text(offer)
+    else:
+        await update.message.reply_text("Bugungi maxsus taklifimiz: Hech qanday taklif mavjud emas.")
+
+
+# Botga buyruqlar
+def main():
+    application = Application.builder().token("7869848901:AAFNM-a-egIAsoWuQYR4PuGOPEoHRPaRCvc").build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
+            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_address)],
+            PARKING_INFO: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_parking_info)],
+        },
+        fallbacks=[]
+    )
+
+    application.add_handler(conv_handler)
+    application.add_handler(CommandHandler("check_order", check_order_status))
+    application.add_handler(CommandHandler("special_offer", send_special_offer))
+    application.add_handler(MessageHandler(filters.TEXT, leave_review))
+    application.add_handler(CallbackQueryHandler(payment_handler))
+
+    application.run_polling()
+
+
+if __name__ == "__main__":
+    main()
