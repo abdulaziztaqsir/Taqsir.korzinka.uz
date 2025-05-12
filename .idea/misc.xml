@@ -3,5 +3,9 @@
   <component name="Black">
     <option name="sdkName" value="Python 3.10 (Taqsir.Korzinka.uz)" />
   </component>
+<<<<<<< HEAD
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.12 (Taqsir.korzinka.uzomo)" project-jdk-type="Python SDK" />
+=======
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 virtualenv at C:\Users\user\PycharmProjects\Taqsir.Korzinka.uz\.venv" project-jdk-type="Python SDK" />
+>>>>>>> a1142c0474d00fc43c6d8ed478a97b29eaa0bfed
 </project>

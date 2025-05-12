@@ -4,7 +4,11 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
     </content>
+<<<<<<< HEAD
     <orderEntry type="jdk" jdkName="Python 3.12 (Taqsir.korzinka.uzomo)" jdkType="Python SDK" />
+=======
+    <orderEntry type="jdk" jdkName="Python 3.10 virtualenv at C:\Users\user\PycharmProjects\Taqsir.Korzinka.uz\.venv" jdkType="Python SDK" />
+>>>>>>> a1142c0474d00fc43c6d8ed478a97b29eaa0bfed
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
